@@ -3,7 +3,6 @@ import pandas as pd
 
 from collections import Counter
 from itertools import combinations_with_replacement, product
-from math import factorial
 
 
 class CommanderGame(object):
@@ -43,6 +42,32 @@ class CommanderGame(object):
         self.armies_sizes = armies_sizes
         self.n_strongholds = n_strongholds
 
+    @property
+    def armies_sizes(self):
+        return self._armies_sizes
+
+    @property
+    def n_strongholds(self):
+        return self._n_strongholds
+
+    @armies_sizes.setter
+    def armies_sizes(self, obj):
+        try:
+            for value in obj:    
+                assert isinstance(value, int) and value >= 0, \
+                    'Army size must be a natural number!'
+            self._armies_sizes = obj
+        except TypeError as e:
+            raise TypeError(
+                'Armies sizes must be passed as a list of two values!'
+            ).with_traceback(e.__traceback__)
+
+    @n_strongholds.setter
+    def n_strongholds(self, value):
+        assert isinstance(value, int) and value >= 0, \
+            'Number of strongholds must be a natural number!'
+        self._n_strongholds = value
+
     def fit_army_orders(self):
         """Creates all possible combinations of orders."""
         soldier_order = np.identity(self.n_strongholds, dtype=int)
@@ -67,20 +92,24 @@ class CommanderGame(object):
             raise RuntimeError('Could not find the "armies_orders_" attribute.'
                                '\nFitting is necessary before you do '
                                'the further calculations.')
-        matrix_size = []
-        for army_size in self.armies_sizes:
-            param = (
-                factorial(army_size + self.n_strongholds - 1) 
-                / (factorial(self.n_strongholds - 1) * factorial(army_size))
-            )
-            matrix_size.append(int(param))
-
-        matrix = np.zeros(matrix_size)
-        for row, row_order in enumerate(self.armies_orders_[0]):
-            for col, col_order in enumerate(self.armies_orders_[1]):
-                matrix[row, col] = self._score_battles(row_order, col_order)
-
-        self.game_matrix_ = matrix
+        
+        matrix = []
+        for row_order in self.armies_orders_[0]:
+            row_results = []
+            for col_order in self.armies_orders_[1]:
+                row_results.append(self._score_battles(row_order, col_order))
+            matrix.append(row_results)
+        matrix = np.array(matrix)
+        
+        self.game_matrix_ = pd.DataFrame(
+            matrix,
+            index=[
+                str(order_list) for order_list in self.armies_orders_[0]
+            ],
+            columns=[
+                str(order_list) for order_list in self.armies_orders_[1]
+            ]
+        ) 
 
         return self
 
@@ -124,7 +153,7 @@ class CommanderGame(object):
         for row_order, col_order in product(*orders_lists):
             row_cond = pattern_lists[0] == Counter(row_order)
             col_cond = pattern_lists[1] == Counter(col_order)
-            smaller_game = self.game_matrix_[row_cond, :][:, col_cond]
+            smaller_game = self.game_matrix_.iloc[row_cond, col_cond]
             game_matrix = pd.DataFrame(
                 smaller_game,
                 index=[
@@ -156,4 +185,3 @@ class CommanderGame(object):
             else:
                 final_score -= first_regiment + 1
         return final_score 
-
